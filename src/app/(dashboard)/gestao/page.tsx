@@ -1,11 +1,9 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { type Student, type BadgeModel, type SchoolSegment, type SchoolClass, type SystemConfig, type FichaLayout } from "@/lib/types";
-import PageHeader from "@/components/page-header";
 import AddStudentCard from "@/components/add-student-card";
 import StudentList from "@/components/student-list";
 import {
@@ -23,7 +21,6 @@ import {
   setDocumentNonBlocking
 } from "@/firebase/non-blocking-updates";
 import { collection, doc, query, orderBy, writeBatch, getDocs, where, addDoc, updateDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signInAnonymously } from "firebase/auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,7 +29,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import {
   Users,
@@ -48,13 +44,6 @@ import {
   Archive,
   Loader2,
   Settings,
-  UserPlus,
-  ListFilter,
-  Palette,
-  RefreshCw,
-  Info,
-  Globe,
-  Code,
   FileJson,
   CheckCircle2,
   XCircle,
@@ -63,17 +52,25 @@ import {
   Eye,
   EyeOff,
   UserCircle,
+  Save,
+  MoveHorizontal,
+  Printer,
+  BookOpen,
+  Layout,
+  Calendar,
+  Info,
+  Globe,
+  Palette,
+  RefreshCw,
+  UserPlus,
+  ListFilter,
   Lock,
   Filter,
   Pencil,
   ChevronRight,
   ArrowRight,
   TrendingUp,
-  Save,
-  MoveHorizontal,
-  Printer,
-  BookOpen,
-  Layout
+  Code
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BulkImportCard from "@/components/bulk-import-card";
@@ -84,8 +81,12 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import FichaLayoutManager from "@/components/ficha-layout-manager";
+import { createUserWithEmailAndPassword, getAuth as getAuthSecondary } from "firebase/auth";
+import { initializeApp, deleteApp } from "firebase/app";
+import { firebaseConfig } from "@/firebase/config";
 
 const registerSchema = z.object({
   email: z.string().email("E-mail inválido."),
@@ -98,16 +99,12 @@ const registerSchema = z.object({
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
-/**
- * Utilitário para converter o formato de turma do Activesoft
- */
 function parseSigaTurma(raw: string) {
   if (!raw || !raw.includes('/')) return { segmento: 'Sincronizado', turma: raw || 'SIGA' };
 
   const parts = raw.split('/').map(p => p.trim());
   let segmento = parts[0];
 
-  // Mapeamento padronizado de siglas
   if (segmento === 'EI' || segmento === 'INF') segmento = 'Educação Infantil';
   else if (segmento === 'EF' || segmento === 'FUND') segmento = 'Ensino Fundamental';
   else if (segmento === 'EM' || segmento === 'MED') segmento = 'Ensino Médio';
@@ -122,9 +119,9 @@ function parseSigaTurma(raw: string) {
 export default function GestaoPage() {
   const router = useRouter();
   const { user, isUserLoading } = useUser();
-  const auth = useAuth();
   const { toast } = useToast();
   const firestore = useFirestore();
+  const auth = useAuth();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("alunos");
@@ -144,7 +141,6 @@ export default function GestaoPage() {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [previewSearchTerm, setPreviewSearchTerm] = useState("");
 
-  // Estrutura - Criação
   const [newSegmentName, setNewSegmentName] = useState("");
   const [newSegmentOrder, setNewSegmentOrder] = useState(1);
   const [segmentSearch, setSegmentSearch] = useState("");
@@ -154,13 +150,11 @@ export default function GestaoPage() {
   const [classSearch, setClassSearch] = useState("");
   const [classFilterSegmentId, setClassFilterSegmentId] = useState<string>("all");
 
-  // Estrutura - Edição
   const [editingSegment, setEditingSegment] = useState<SchoolSegment | null>(null);
   const [isEditSegDialogOpen, setIsEditSegDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<SchoolClass | null>(null);
   const [isEditClassDialogOpen, setIsEditClassDialogOpen] = useState(false);
 
-  // Migração Massiva (Aba Estrutura)
   const [migrationSourceTurma, setMigrationSourceTurma] = useState("");
   const [migrationTargetTurma, setMigrationTargetTurma] = useState("");
   const [migrationTargetSegmentId, setMigrationTargetSegmentId] = useState("");
@@ -169,15 +163,10 @@ export default function GestaoPage() {
   const [migrationTargetSegId, setMigrationTargetSegId] = useState("");
   const [isMigratingSeg, setIsMigratingSeg] = useState(false);
 
-  // Migração de Selecionados (Aba Alunos)
   const [targetSelectedSegmentId, setTargetSelectedSegmentId] = useState("");
   const [targetSelectedTurmaName, setTargetSelectedTurmaName] = useState("");
   const [isMigratingSelected, setIsMigratingSelected] = useState(false);
 
-  // Professores por Turma
-  const [newProfessorName, setNewProfessorName] = useState("");
-
-  // Sistema
   const [logoBase64, setLogoBase64] = useState("");
   const [logoHeight, setLogoHeight] = useState(48);
   const [logoFichaBase64, setLogoFichaBase64] = useState("");
@@ -186,20 +175,44 @@ export default function GestaoPage() {
   const [sigaToken, setSigaToken] = useState("");
   const [sigaUsername, setSigaUsername] = useState("");
   const [sigaPassword, setSigaPassword] = useState("");
+  const [carometroCardsPerRow, setCarometroCardsPerRow] = useState(10);
+  const [carometroBorderRadius, setCarometroBorderRadius] = useState(16);
+  const [carometroCardScale, setCarometroCardScale] = useState(100);
+  const [carometroGap, setCarometroGap] = useState(16);
+  const [carometroShadowIntensity, setCarometroShadowIntensity] = useState(0.03);
+  const [carometroFontSize, setCarometroFontSize] = useState(12);
+  const [carometroBadgeBorderRadius, setCarometroBadgeBorderRadius] = useState(20);
+  const [carometroButtonBorderRadius, setCarometroButtonBorderRadius] = useState(4);
+  const [activeTrimesterId, setActiveTrimesterId] = useState("t1");
+  const [newProfessorName, setNewProfessorName] = useState("");
+  const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
 
-  const configRef = useMemoFirebase(() => firestore ? doc(firestore, 'configuracoes', 'geral') : null, [firestore]);
+  const configRef = useMemoFirebase(() => (firestore && user) ? doc(firestore, 'configuracoes', 'geral') : null, [firestore, user]);
   const { data: configData } = useDoc<SystemConfig>(configRef);
 
   useEffect(() => {
-    if (configData?.logoUrl) setLogoBase64(configData.logoUrl);
-    if (configData?.logoHeight) setLogoHeight(configData.logoHeight);
-    if (configData?.logoFichaUrl) setLogoFichaBase64(configData.logoFichaUrl);
-    if (configData?.logoFichaHeight) setLogoFichaHeight(configData.logoFichaHeight);
-    if (configData?.sigaUrl) setSigaUrl(configData.sigaUrl);
-    if (configData?.sigaToken) setSigaToken(configData.sigaToken);
-    if (configData?.sigaUsername) setSigaUsername(configData.sigaUsername);
-    if (configData?.sigaPassword) setSigaPassword(configData.sigaPassword);
-  }, [configData]);
+    if (configData && !hasLoadedConfig) {
+      if (configData.logoUrl) setLogoBase64(configData.logoUrl);
+      if (configData.logoHeight) setLogoHeight(configData.logoHeight);
+      if (configData.logoFichaUrl) setLogoFichaBase64(configData.logoFichaUrl);
+      if (configData.logoFichaHeight) setLogoFichaHeight(configData.logoFichaHeight);
+      if (configData.sigaUrl) setSigaUrl(configData.sigaUrl);
+      if (configData.sigaToken) setSigaToken(configData.sigaToken);
+      if (configData.sigaUsername) setSigaUsername(configData.sigaUsername);
+      if (configData.sigaPassword) setSigaPassword(configData.sigaPassword);
+      if (configData.carometroCardsPerRow) setCarometroCardsPerRow(configData.carometroCardsPerRow);
+      if (configData.carometroBorderRadius !== undefined) setCarometroBorderRadius(configData.carometroBorderRadius);
+      if (configData.carometroCardScale) setCarometroCardScale(configData.carometroCardScale);
+      if (configData.carometroGap) setCarometroGap(configData.carometroGap);
+      if (configData.carometroShadowIntensity !== undefined) setCarometroShadowIntensity(configData.carometroShadowIntensity);
+      if (configData.carometroFontSize) setCarometroFontSize(configData.carometroFontSize);
+      if (configData.carometroBadgeBorderRadius !== undefined) setCarometroBadgeBorderRadius(configData.carometroBadgeBorderRadius);
+      if (configData.carometroButtonBorderRadius !== undefined) setCarometroButtonBorderRadius(configData.carometroButtonBorderRadius);
+      if (configData.activeTrimesterId) setActiveTrimesterId(configData.activeTrimesterId);
+      
+      setHasLoadedConfig(true);
+    }
+  }, [configData, hasLoadedConfig]);
 
   const registerForm = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -252,14 +265,17 @@ export default function GestaoPage() {
 
   const filteredStudents = useMemo(() => {
     let result = allStudents.filter(s => showTransferred ? s.ativo === false : s.ativo !== false);
-    if (filterSegmentoId) result = result.filter(s => s.segmento === filterSegmentoId);
+    if (filterSegmentoId) {
+      const segName = schoolSegments.find(s => s.id === filterSegmentoId)?.nome;
+      if (segName) result = result.filter(s => s.segmento === segName);
+    }
     if (filterTurma) result = result.filter(s => s.turma === filterTurma);
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       result = result.filter(s => s.nome.toLowerCase().includes(term) || String(s.matricula).toLowerCase().includes(term));
     }
     return result.sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [allStudents, showTransferred, searchTerm, filterSegmentoId, filterTurma]);
+  }, [allStudents, showTransferred, searchTerm, filterSegmentoId, filterTurma, schoolSegments]);
 
   const selectedInFilter = useMemo(() => filteredStudents.filter(s => s.enabled === true), [filteredStudents]);
 
@@ -349,7 +365,6 @@ export default function GestaoPage() {
         toast({ variant: "destructive", title: "Nenhum aluno", description: "Não há alunos na turma de origem." });
         return;
       }
-      const batch = writeBatch(firestore);
       const updates: any = {};
       if (migrationTargetTurma && migrationTargetTurma !== "UNCHANGED") updates.turma = migrationTargetTurma;
       if (migrationTargetSegmentId && migrationTargetSegmentId !== "UNCHANGED") {
@@ -545,23 +560,41 @@ export default function GestaoPage() {
 
   const saveVisualSettings = () => {
     if (!firestore) return;
-    setDocumentNonBlocking(doc(firestore, 'configuracoes', 'geral'), {
-      logoUrl: logoBase64,
-      logoHeight,
-      logoFichaUrl: logoFichaBase64,
-      logoFichaHeight,
-      sigaUrl,
-      sigaToken,
-      sigaUsername,
-      sigaPassword
-    }, { merge: true });
+    
+    const payload = Object.fromEntries(
+      Object.entries({
+        logoUrl: logoBase64,
+        logoHeight,
+        logoFichaUrl: logoFichaBase64,
+        logoFichaHeight,
+        sigaUrl,
+        sigaToken,
+        sigaUsername,
+        sigaPassword,
+        carometroCardsPerRow,
+        carometroBorderRadius,
+        carometroCardScale,
+        carometroGap,
+        carometroShadowIntensity,
+        carometroFontSize,
+        carometroBadgeBorderRadius,
+        carometroButtonBorderRadius,
+        activeTrimesterId
+      }).filter(([_, v]) => v !== undefined)
+    );
+
+    setDocumentNonBlocking(doc(firestore, 'configuracoes', 'geral'), payload, { merge: true });
     toast({ title: "Configurações salvas!" });
   };
 
-  // Funções de Edição de Estrutura
   const handleEditSegment = (seg: SchoolSegment) => {
     setEditingSegment(seg);
     setIsEditSegDialogOpen(true);
+  };
+
+  const handleEditClass = (cls: SchoolClass) => {
+    setEditingClass(cls);
+    setIsEditClassDialogOpen(true);
   };
 
   const onUpdateSegment = () => {
@@ -573,11 +606,6 @@ export default function GestaoPage() {
     });
     setIsEditSegDialogOpen(false);
     toast({ title: "Segmento atualizado!" });
-  };
-
-  const handleEditClass = (cls: SchoolClass) => {
-    setEditingClass(cls);
-    setIsEditClassDialogOpen(true);
   };
 
   const onUpdateClass = () => {
@@ -595,8 +623,7 @@ export default function GestaoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader />
+    <div className="min-h-screen bg-transparent print-mode-badge">
       <main className="container mx-auto p-4 md:p-8">
         <div className="flex flex-col gap-8">
           <div className="flex justify-between items-end">
@@ -611,7 +638,7 @@ export default function GestaoPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-12 mb-8 shadow-sm">
+            <TabsList className="grid w-full grid-cols-5 h-12 mb-8 shadow-sm">
               <TabsTrigger value="alunos" className="gap-2"><Users size={16} /> Alunos</TabsTrigger>
               <TabsTrigger value="estrutura" className="gap-2"><School size={16} /> Estrutura</TabsTrigger>
               <TabsTrigger value="fichas" className="gap-2"><Layout size={16} /> Fichas</TabsTrigger>
@@ -621,191 +648,160 @@ export default function GestaoPage() {
 
             <TabsContent value="alunos" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                <div className="lg:col-span-1 flex flex-col gap-6">
+                {/* Coluna Esquerda: Adicionar + Filtros */}
+                <div className="lg:col-span-1 flex flex-col gap-4">
                   <AddStudentCard onAddStudent={(s) => addDocumentNonBlocking(alunosCollection!, { ...s, enabled: true, visivelFila: true, ativo: true })} models={models} students={allStudents} segments={schoolSegments} classes={schoolClasses} />
 
+                  {/* Info do usuário logado */}
                   <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-                    <div className="p-4 border-b bg-muted/20 flex items-center gap-2">
-                      <ListFilter size={18} className="text-primary" />
-                      <span className="font-bold text-sm">Controle de Fluxo</span>
+                    <div className="p-3 border-b bg-primary/5 flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-black">{(user?.displayName || user?.email || 'U')[0].toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black truncate">{user?.displayName || user?.email?.split('@')[0] || 'Usuário'}</p>
+                        <p className="text-[9px] text-muted-foreground truncate">{user?.email}</p>
+                      </div>
                     </div>
+                  </div>
 
-                    <Tabs defaultValue="filtros" className="w-full">
-                      <TabsList className="grid w-full grid-cols-2 h-10 bg-transparent border-b rounded-none">
-                        <TabsTrigger value="filtros" className="text-[10px] uppercase font-bold tracking-widest data-[state=active]:bg-background">Filtros</TabsTrigger>
-                        <TabsTrigger value="lote" className="text-[10px] uppercase font-bold tracking-widest data-[state=active]:bg-background">Ações em Lote</TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="filtros" className="p-4 space-y-4 animate-in fade-in duration-200">
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-bold uppercase text-muted-foreground">Segmento (Lista)</label>
-                          <Select value={filterSegmentoId || "all"} onValueChange={(val) => { setFilterSegmentoId(val === "all" ? null : val); setFilterTurma(null); }}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todos ({allStudents.filter(s => s.ativo !== false).length})</SelectItem>
-                              {schoolSegments.map(s => (
-                                <SelectItem key={s.id} value={s.nome}>
-                                  {s.nome} ({segmentCounts[s.nome] || 0})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-bold uppercase text-muted-foreground">Turma (Lista)</label>
-                          <Select value={filterTurma || "all"} onValueChange={(val) => setFilterTurma(val === "all" ? null : val)}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todas</SelectItem>
-                              {schoolClasses.filter(c => !filterSegmentoId || c.segmentoId === schoolSegments.find(s => s.nome === filterSegmentoId)?.id).map(t => (
-                                <SelectItem key={t.id} value={t.nome}>
-                                  {t.nome} ({classCounts[t.nome] || 0})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button variant={showTransferred ? "secondary" : "outline"} size="sm" onClick={() => setShowTransferred(!showTransferred)} className="w-full h-9 text-[10px] font-bold uppercase tracking-wider">
-                          {showTransferred ? <UserCheck size={14} className="mr-2" /> : <Archive size={14} className="mr-2" />}
-                          {showTransferred ? "Ver Ativos" : "Ver Arquivados"}
+                  {/* Filtros rápidos */}
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2"><ListFilter size={14} className="text-primary" /> Filtros</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 px-4 pb-4">
+                      <Select value={filterSegmentoId || 'all'} onValueChange={(v) => { setFilterSegmentoId(v === 'all' ? null : v); setFilterTurma(null); }}>
+                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Todos os Segmentos" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os Segmentos</SelectItem>
+                          {schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={filterTurma || 'all'} onValueChange={(v) => setFilterTurma(v === 'all' ? null : v)}>
+                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Todas as Turmas" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as Turmas</SelectItem>
+                          {schoolClasses.filter(c => !filterSegmentoId || c.segmentoId === filterSegmentoId).map(t => <SelectItem key={t.id} value={t.nome}>{t.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex gap-2">
+                        <Button variant={showTransferred ? 'default' : 'outline'} size="sm" className="flex-1 h-8 text-[10px] gap-1" onClick={() => setShowTransferred(!showTransferred)}>
+                          <Archive size={12} /> {showTransferred ? 'Arquivados' : 'Ativos'}
                         </Button>
-                      </TabsContent>
+                        <Button variant="ghost" size="sm" className="h-8 text-[10px]" onClick={() => { setFilterSegmentoId(null); setFilterTurma(null); setSearchTerm(''); }}>
+                          Limpar
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  {/* Ações em Lote */}
+                  <div className="bg-card rounded-xl border shadow-sm overflow-hidden mt-2">
+                    <div className="p-4 space-y-4">
+                      {/* Grupo 1: Para todos filtrados */}
+                      <div className="space-y-2">
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleEnabled(true)}>
+                          <CheckSquare size={14} className="text-primary" /> SELECIONAR TODOS P/ IMPRESSÃO
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleEnabled(false)}>
+                          <Square size={14} className="text-muted-foreground" /> DESELECIONAR TODOS P/ IMPRESSÃO
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleVisibilidade(true)}>
+                          <Eye size={14} className="text-primary" /> HABILITAR TODOS NA FILA
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleVisibilidade(false)}>
+                          <EyeOff size={14} className="text-muted-foreground" /> OCULTAR TODOS DA FILA
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => handleBulkToggleAtivo(false)}>
+                          <UserMinus size={14} /> TRANSFERIR TODOS FILTRADOS
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleBulkToggleAtivo(true)}>
+                          <UserCheck size={14} /> REATIVAR TODOS FILTRADOS
+                        </Button>
+                      </div>
 
-                      <TabsContent value="lote" className="p-4 space-y-6 animate-in fade-in duration-200">
-                        <div className="space-y-3">
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block border-b pb-1">Para todos filtrados ({filteredStudents.length})</span>
-                          <div className="grid grid-cols-1 gap-2">
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleEnabled(true)}>
-                              <CheckSquare size={14} className="text-primary" /> Selecionar Todos p/ Impressão
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleEnabled(false)}>
-                              <Square size={14} className="text-muted-foreground" /> Deselecionar Todos p/ Impressão
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleVisibilidade(true)}>
-                              <Eye size={14} className="text-primary" /> Habilitar Todos na Fila
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleVisibilidade(false)}>
-                              <EyeOff size={14} className="text-muted-foreground" /> Ocultar Todos da Fila
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-orange-50/50 text-orange-600 border-orange-200" onClick={() => handleBulkToggleAtivo(false)}>
-                              <UserMinus size={14} /> Transferir Todos Filtrados
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-green-50/50 text-green-600 border-green-200" onClick={() => handleBulkToggleAtivo(true)}>
-                              <UserCheck size={14} /> Reativar Todos Filtrados
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t">
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block border-b pb-1">Para selecionados ({selectedInFilter.length})</span>
-                          <div className="flex flex-col gap-2">
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleVisibilidade(true, true)}>
-                              <Eye size={14} className="text-primary" /> Mostrar Selecionados na Fila
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-background" onClick={() => handleBulkToggleVisibilidade(false, true)}>
-                              <EyeOff size={14} className="text-muted-foreground" /> Ocultar Selecionados da Fila
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-orange-50/50 text-orange-600 border-orange-200" onClick={() => handleBulkToggleAtivo(false, true)}>
-                              <UserMinus size={14} /> Transferir Selecionados
-                            </Button>
-                            <Button variant="outline" className="h-9 justify-start gap-3 text-[10px] uppercase font-bold bg-green-50/50 text-green-600 border-green-200" onClick={() => handleBulkToggleAtivo(true, true)}>
-                              <UserCheck size={14} /> Reativar Selecionados
-                            </Button>
-
-                            <div className="mt-4 p-3 bg-blue-50/50 rounded-lg border border-blue-200 space-y-3">
-                              <span className="text-[10px] font-bold uppercase text-blue-700 flex items-center gap-2"><Printer size={14} /> Impressão em Lote</span>
-                              <Button
-                                className="w-full h-10 font-bold bg-blue-600 hover:bg-blue-700 shadow-sm"
-                                onClick={() => {
-                                  const selected = filteredStudents.filter(s => s.enabled);
-                                  if (selected.length === 0) {
-                                    toast({ variant: "destructive", title: "Nenhum selecionado", description: "Marque os alunos com o check azul primeiro." });
-                                    return;
-                                  }
-                                  router.push(`/fichas/bulk?year=${new Date().getFullYear()}`);
-                                }}
-                              >
-                                <BookOpen size={16} className="mr-2" /> Imprimir Fichas Selecionadas ({filteredStudents.filter(s => s.enabled).length})
-                              </Button>
-                            </div>
-
-                            <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20 space-y-3">
-                              <span className="text-[10px] font-bold uppercase text-primary flex items-center gap-2"><MoveHorizontal size={14} /> Migrar Selecionados</span>
-                              <div className="space-y-2">
-                                <Select value={targetSelectedSegmentId} onValueChange={setTargetSelectedSegmentId}>
-                                  <SelectTrigger className="h-8 text-xs bg-background"><SelectValue placeholder="Novo Segmento..." /></SelectTrigger>
-                                  <SelectContent>{schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
-                                </Select>
-                                <Select value={targetSelectedTurmaName} onValueChange={setTargetSelectedTurmaName}>
-                                  <SelectTrigger className="h-8 text-xs bg-background"><SelectValue placeholder="Nova Turma..." /></SelectTrigger>
-                                  <SelectContent>
-                                    {schoolClasses.filter(c => !targetSelectedSegmentId || c.segmentoId === targetSelectedSegmentId).map(t => <SelectItem key={t.id} value={t.nome}>{t.nome}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                                <Button className="w-full h-8 text-[10px] uppercase font-bold" onClick={handleBulkMigrateSelected} disabled={isMigratingSelected || !targetSelectedSegmentId || !targetSelectedTurmaName}>
-                                  {isMigratingSelected ? <Loader2 className="animate-spin" /> : "Mover Selecionados"}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
+                      {/* Grupo 2: Para selecionados */}
+                      <div className="space-y-2 pt-4 border-t">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block mb-2">
+                          PARA SELECIONADOS ({selectedInFilter.length})
+                        </span>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleVisibilidade(true, true)}>
+                          <Eye size={14} className="text-primary" /> MOSTRAR SELECIONADOS NA FILA
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold" onClick={() => handleBulkToggleVisibilidade(false, true)}>
+                          <EyeOff size={14} className="text-muted-foreground" /> OCULTAR SELECIONADOS DA FILA
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => handleBulkToggleAtivo(false, true)}>
+                          <UserMinus size={14} /> TRANSFERIR SELECIONADOS
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-9 justify-start gap-3 text-xs font-semibold text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleBulkToggleAtivo(true, true)}>
+                          <UserCheck size={14} /> REATIVAR SELECIONADOS
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="lg:col-span-3">
+                {/* Coluna Principal: Lista + Migração */}
+                <div className="lg:col-span-3 flex flex-col gap-4">
+
+                  {/* Migrar Turma */}
+                  <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/20">
+                      <span className="text-sm font-black text-primary flex items-center gap-2"><ArrowRightLeft size={14} /> Migrar Turma em Bloco</span>
+                      <span className="text-[10px] text-muted-foreground font-medium">Move todos de uma turma para outra</span>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-bold uppercase text-muted-foreground">Turma Origem</Label>
+                        <Select value={migrationSourceTurma || 'none'} onValueChange={v => setMigrationSourceTurma(v === 'none' ? '' : v)}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Origem..." /></SelectTrigger>
+                          <SelectContent>{schoolClasses.map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-bold uppercase text-muted-foreground">Segmento Destino</Label>
+                        <Select value={migrationTargetSegmentId || 'UNCHANGED'} onValueChange={v => setMigrationTargetSegmentId(v === 'UNCHANGED' ? '' : v)}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Segmento..." /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="UNCHANGED">Manter igual</SelectItem>
+                            {schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-bold uppercase text-muted-foreground">Turma Destino</Label>
+                        <Select value={migrationTargetTurma || 'UNCHANGED'} onValueChange={v => setMigrationTargetTurma(v === 'UNCHANGED' ? '' : v)}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Destino..." /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="UNCHANGED">Manter igual</SelectItem>
+                            {schoolClasses.filter(c => !migrationTargetSegmentId || c.segmentoId === migrationTargetSegmentId).map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button className="h-9 gap-2 text-xs font-bold" onClick={handleMigrateStudents} disabled={isMigrating || !migrationSourceTurma}>
+                        {isMigrating ? <Loader2 size={13} className="animate-spin" /> : <ArrowRightLeft size={13} />} Mover Alunos
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Lista de Alunos */}
                   <Card className="shadow-sm">
-                    <CardHeader className="flex flex-col gap-6 py-6 border-b">
+                    <CardHeader className="flex flex-col gap-3 py-4 border-b px-6">
                       <div className="flex flex-row items-center justify-between">
                         <div>
-                          <CardTitle className="text-xl font-bold text-primary">{showTransferred ? "Alunos Arquivados" : "Alunos Ativos"}</CardTitle>
-                          <CardDescription className="text-xs font-medium">{filteredStudents.length} registros encontrados</CardDescription>
+                          <CardTitle className="text-xl font-bold text-primary">{showTransferred ? 'Alunos Arquivados' : 'Alunos Ativos'}</CardTitle>
+                          <CardDescription className="text-xs font-medium">{filteredStudents.length} registros · {selectedInFilter.length} selecionados p/ impressão</CardDescription>
                         </div>
-                        <div className="relative w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nome ou matrícula..." className="pl-9 h-10 text-xs" value={searchTerm ?? ""} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                      </div>
-
-                      {/* Filtro por Botões (Pills) na Gestão */}
-                      <div className="space-y-3">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1 tracking-widest">
-                          <Layers size={12} className="text-primary" /> Atalhos por Segmento (Botões)
-                        </label>
-                        <ScrollArea className="w-full pb-2">
-                          <div className="flex gap-2">
-                            <Button
-                              variant={filterSegmentoId === null ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => { setFilterSegmentoId(null); setFilterTurma(null); }}
-                              className={cn(
-                                "rounded-full h-8 px-4 text-[10px] font-bold transition-all shadow-sm",
-                                filterSegmentoId === null ? "shadow-primary/20" : "bg-background"
-                              )}
-                            >
-                              Todos
-                            </Button>
-                            {schoolSegments.map((seg) => (
-                              <Button
-                                key={seg.id}
-                                variant={filterSegmentoId === seg.nome ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => { setFilterSegmentoId(seg.nome); setFilterTurma(null); }}
-                                className={cn(
-                                  "rounded-full h-8 px-4 text-[10px] font-bold whitespace-nowrap transition-all shadow-sm",
-                                  filterSegmentoId === seg.nome ? "shadow-primary/20" : "bg-background"
-                                )}
-                              >
-                                {seg.nome}
-                                <span className={cn(
-                                  "ml-2 text-[9px] opacity-70",
-                                  filterSegmentoId === seg.nome ? "text-white" : "text-primary"
-                                )}>
-                                  ({segmentCounts[seg.nome] || 0})
-                                </span>
-                              </Button>
-                            ))}
+                        <div className="flex items-center gap-2">
+                          <div className="relative w-52">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input placeholder="Buscar..." className="pl-9 h-9 text-xs" value={searchTerm ?? ''} onChange={(e) => setSearchTerm(e.target.value)} />
                           </div>
-                          <ScrollBar orientation="horizontal" />
-                        </ScrollArea>
+                          <Button size="sm" className="h-9 gap-2 text-xs bg-primary" onClick={() => router.push(`/fichas/bulk?year=${new Date().getFullYear()}`)}>
+                            <Printer size={12} /> Imprimir ({selectedInFilter.length})
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <StudentList students={filteredStudents} models={models} allStudents={allStudents} onUpdate={(s) => updateDocumentNonBlocking(doc(firestore!, 'alunos', s.id), s)} onDelete={(id) => deleteDocumentNonBlocking(doc(firestore!, 'alunos', id))} viewMode="table" segments={schoolSegments} classes={schoolClasses} />
@@ -819,8 +815,8 @@ export default function GestaoPage() {
             </TabsContent>
 
             <TabsContent value="estrutura" className="space-y-8">
-              {/* Conteúdo de Estrutura permanece igual */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Card de Segmentos */}
                 <Card className="shadow-sm border-2">
                   <CardHeader className="pb-4">
                     <div className="flex justify-between items-center">
@@ -833,26 +829,17 @@ export default function GestaoPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex gap-2 bg-muted/20 p-2 rounded-lg border">
-                      <Input placeholder="Novo Segmento" value={newSegmentName ?? ""} onChange={(e) => setNewSegmentName(e.target.value)} className="bg-background h-10" />
+                      <Input placeholder="Novo Segmento" value={newSegmentName ?? ''} onChange={(e) => setNewSegmentName(e.target.value)} className="bg-background h-10" />
                       <Input type="number" placeholder="Ordem" value={newSegmentOrder ?? 0} onChange={(e) => setNewSegmentOrder(Number(e.target.value))} className="w-20 bg-background h-10" />
-                      <Button onClick={() => { if (!newSegmentName) return; addDocumentNonBlocking(collection(firestore!, 'segmentos'), { nome: newSegmentName, ordem: newSegmentOrder }); setNewSegmentName(""); setNewSegmentOrder(p => p + 1); }} className="h-10 px-3"><Plus size={18} /></Button>
+                      <Button onClick={() => { if (!newSegmentName) return; addDocumentNonBlocking(collection(firestore!, 'segmentos'), { nome: newSegmentName, ordem: newSegmentOrder }); setNewSegmentName(''); setNewSegmentOrder(p => p + 1); }} className="h-10 px-3"><Plus size={18} /></Button>
                     </div>
-
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Filtrar segmentos..." className="pl-9 h-9 text-xs" value={segmentSearch ?? ""} onChange={(e) => setSegmentSearch(e.target.value)} />
-                    </div>
-
-                    <ScrollArea className="h-[400px] border rounded-xl overflow-hidden shadow-inner bg-muted/5">
+                    <ScrollArea className="h-[360px] border rounded-xl overflow-hidden shadow-inner bg-muted/5">
                       <div className="divide-y">
-                        {schoolSegments.filter(s => !segmentSearch || s.nome.toLowerCase().includes(segmentSearch.toLowerCase())).map(seg => (
+                        {schoolSegments.map(seg => (
                           <div key={seg.id} className="p-4 flex justify-between items-center hover:bg-muted/30 transition-colors group">
                             <div className="flex items-center gap-3">
                               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{seg.ordem}</span>
-                              <div className="flex flex-col">
-                                <span className="font-bold text-sm">{seg.nome}</span>
-                                <span className="text-[10px] text-muted-foreground">{segmentCounts[seg.nome] || 0} alunos</span>
-                              </div>
+                              <span className="font-bold text-sm">{seg.nome}</span>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleEditSegment(seg)}><Pencil size={14} /></Button>
@@ -865,176 +852,178 @@ export default function GestaoPage() {
                   </CardContent>
                 </Card>
 
+                {/* Card de Turmas */}
                 <Card className="shadow-sm border-2">
                   <CardHeader className="pb-4">
                     <div className="flex justify-between items-center">
                       <div>
                         <CardTitle className="text-xl flex items-center gap-2"><School size={20} className="text-primary" /> Turmas</CardTitle>
-                        <CardDescription className="text-xs">Vincule turmas aos segmentos.</CardDescription>
+                        <CardDescription className="text-xs">Cadastre e vincule turmas aos segmentos.</CardDescription>
                       </div>
                       <Badge variant="outline" className="font-mono">{schoolClasses.length}</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-muted/20 p-2 rounded-lg border">
-                      <Select value={newClassSegmentId} onValueChange={setNewClassSegmentId}>
-                        <SelectTrigger className="bg-background h-10"><SelectValue placeholder="Segmento..." /></SelectTrigger>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-col gap-2 bg-muted/20 p-2 rounded-lg border">
+                      <Select value={newClassSegmentId || 'none'} onValueChange={v => setNewClassSegmentId(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecionar Segmento" /></SelectTrigger>
                         <SelectContent>{schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
                       </Select>
                       <div className="flex gap-2">
-                        <Input placeholder="Nome da Turma" value={newClassName ?? ""} onChange={(e) => setNewClassName(e.target.value)} className="bg-background h-10" />
-                        <Input type="number" placeholder="Ordem" value={newClassOrder ?? 0} onChange={(e) => setNewClassOrder(Number(e.target.value))} className="w-16 bg-background h-10" />
-                        <Button onClick={() => { if (!newClassName || !newClassSegmentId) return; addDocumentNonBlocking(collection(firestore!, 'turmas'), { nome: newClassName, segmentoId: newClassSegmentId, ordem: newClassOrder }); setNewClassName(""); setNewClassOrder(p => p + 1); }} className="h-10 px-3"><Plus size={18} /></Button>
+                        <Input placeholder="Nome da Turma" value={newClassName ?? ''} onChange={(e) => setNewClassName(e.target.value)} className="bg-background h-9" />
+                        <Input type="number" placeholder="Ordem" value={newClassOrder ?? 0} onChange={(e) => setNewClassOrder(Number(e.target.value))} className="w-20 bg-background h-9" />
+                        <Button onClick={() => { if (!newClassName || !newClassSegmentId) return; addDocumentNonBlocking(collection(firestore!, 'turmas'), { nome: newClassName, segmentoId: newClassSegmentId, ordem: newClassOrder }); setNewClassName(''); setNewClassOrder(p => p + 1); }} className="h-9 px-3" disabled={!newClassName || !newClassSegmentId}><Plus size={16} /></Button>
                       </div>
                     </div>
-
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Filtrar turmas..." className="pl-9 h-9 text-xs" value={classSearch ?? ""} onChange={(e) => setClassSearch(e.target.value)} />
+                        <Input placeholder="Filtrar turmas..." value={classSearch ?? ''} onChange={(e) => setClassSearch(e.target.value)} className="pl-9 h-9 text-xs" />
                       </div>
                       <Select value={classFilterSegmentId} onValueChange={setClassFilterSegmentId}>
-                        <SelectTrigger className="w-40 h-9 text-xs"><SelectValue placeholder="Filtrar Segmento" /></SelectTrigger>
+                        <SelectTrigger className="h-9 text-xs w-40"><SelectValue placeholder="Todos" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todos os Segmentos</SelectItem>
+                          <SelectItem value="all">Todos</SelectItem>
                           {schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <ScrollArea className="h-[400px] border rounded-xl overflow-hidden shadow-inner bg-muted/5">
+                    <ScrollArea className="h-[260px] border rounded-xl overflow-hidden shadow-inner bg-muted/5">
                       <div className="divide-y">
-                        {schoolClasses.filter(t => (classFilterSegmentId === "all" || t.segmentoId === classFilterSegmentId) && (!classSearch || t.nome.toLowerCase().includes(classSearch.toLowerCase()))).map(t => (
-                          <div key={t.id} className="p-4 flex justify-between items-center hover:bg-muted/30 transition-colors group">
-                            <div className="flex items-center gap-3">
-                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{t.ordem}</span>
-                              <div>
-                                <div className="font-bold text-sm flex items-center gap-2">
-                                  {t.nome}
-                                  <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-primary/10 text-primary border-none">
-                                    {classCounts[t.nome] || 0} alunos
-                                  </Badge>
-                                </div>
-                                <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">{schoolSegments.find(s => s.id === t.segmentoId)?.nome}</div>
-                                {t.professores && t.professores.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {t.professores.map((p, idx) => (
-                                      <Badge key={idx} variant="outline" className="text-[8px] h-3.5 px-1 bg-green-50 text-green-700 border-green-200">
-                                        {p}
-                                      </Badge>
-                                    ))}
+                        {schoolClasses
+                          .filter(c => (classFilterSegmentId === 'all' || c.segmentoId === classFilterSegmentId) && (!classSearch || c.nome.toLowerCase().includes(classSearch.toLowerCase())))
+                          .map(cls => {
+                            const seg = schoolSegments.find(s => s.id === cls.segmentoId);
+                            return (
+                              <div key={cls.id} className="p-3 flex justify-between items-center hover:bg-muted/30 transition-colors group">
+                                <div className="flex items-center gap-3">
+                                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{cls.ordem}</span>
+                                  <div>
+                                    <span className="font-bold text-sm">{cls.nome}</span>
+                                    {seg && <p className="text-[10px] text-muted-foreground">{seg.nome}</p>}
                                   </div>
-                                )}
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleEditClass(cls)}><Pencil size={14} /></Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(firestore!, 'turmas', cls.id))}><Trash2 size={14} /></Button>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleEditClass(t)}><Pencil size={14} /></Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(firestore!, 'turmas', t.id))}><Trash2 size={14} /></Button>
-                            </div>
-                          </div>
-                        ))}
+                            );
+                          })
+                        }
                       </div>
                     </ScrollArea>
                   </CardContent>
                 </Card>
               </div>
 
+              {/* Migrações */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <Card className="border-primary/20 shadow-lg bg-primary/5">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-xl flex items-center gap-3 text-primary">
-                      <div className="bg-primary text-white p-2 rounded-lg shadow-sm"><ArrowRightLeft size={20} /></div>
-                      Migração Massiva de Turmas
-                    </CardTitle>
-                    <CardDescription className="text-sm font-medium">Mova alunos de uma turma específica para outra.</CardDescription>
+                <Card className="shadow-sm border-2 border-orange-200/50">
+                  <CardHeader className="pb-4 bg-orange-50/30">
+                    <CardTitle className="text-lg flex items-center gap-2 text-orange-700"><ArrowRightLeft size={20} /> Migrar Turma em Bloco</CardTitle>
+                    <CardDescription className="text-xs">Move todos os alunos de uma turma para outra, atualizando segmento e turma.</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">1. Turma de Origem</label>
-                        <Select value={migrationSourceTurma} onValueChange={migrationSourceTurma => setMigrationSourceTurma(migrationSourceTurma)}>
-                          <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Escolha a turma..." /></SelectTrigger>
+                  <CardContent className="space-y-3 pt-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Turma de Origem</Label>
+                      <Select value={migrationSourceTurma || 'none'} onValueChange={v => setMigrationSourceTurma(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione a turma de origem..." /></SelectTrigger>
+                        <SelectContent>{schoolClasses.map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Segmento Destino</Label>
+                        <Select value={migrationTargetSegmentId || 'UNCHANGED'} onValueChange={v => setMigrationTargetSegmentId(v === 'UNCHANGED' ? '' : v)}>
+                          <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="Manter igual" /></SelectTrigger>
                           <SelectContent>
-                            {Array.from(new Set(allStudents.map(s => s.turma))).sort().map(t => (
-                              <SelectItem key={`source-${t}`} value={t}>{t}</SelectItem>
-                            ))}
+                            <SelectItem value="UNCHANGED">Manter segmento</SelectItem>
+                            {schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">2. Nova Turma</label>
-                          <Select value={migrationTargetTurma} onValueChange={migrationTargetTurma => setMigrationTargetTurma(migrationTargetTurma)}>
-                            <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Manter atual..." /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="UNCHANGED">Manter atual...</SelectItem>
-                              {schoolClasses.map(t => <SelectItem key={`target-${t.id}`} value={t.nome}>{t.nome}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">3. Novo Segmento</label>
-                          <Select value={migrationTargetSegmentId} onValueChange={migrationTargetSegmentId => setMigrationTargetSegmentId(migrationTargetSegmentId)}>
-                            <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Manter atual..." /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="UNCHANGED">Manter atual...</SelectItem>
-                              {schoolSegments.map(s => <SelectItem key={`target-seg-${s.id}`} value={s.id}>{s.nome}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Turma Destino</Label>
+                        <Select value={migrationTargetTurma || 'UNCHANGED'} onValueChange={v => setMigrationTargetTurma(v === 'UNCHANGED' ? '' : v)}>
+                          <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="Manter igual" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="UNCHANGED">Manter turma</SelectItem>
+                            {schoolClasses.filter(c => !migrationTargetSegmentId || c.segmentoId === migrationTargetSegmentId).map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <Button className="h-11 font-bold gap-2 text-md shadow-lg w-full mt-2" onClick={handleMigrateStudents} disabled={isMigrating || !migrationSourceTurma}>
-                        {isMigrating ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
-                        Executar Migração por Turma
-                      </Button>
                     </div>
+                    <Button className="w-full h-10 gap-2 font-bold bg-orange-600 hover:bg-orange-700" onClick={handleMigrateStudents} disabled={isMigrating || !migrationSourceTurma}>
+                      {isMigrating ? <Loader2 size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />} Mover Alunos da Turma
+                    </Button>
                   </CardContent>
                 </Card>
 
-                <Card className="border-accent/20 shadow-lg bg-accent/5">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-xl flex items-center gap-3 text-accent">
-                      <div className="bg-accent text-white p-2 rounded-lg shadow-sm"><TrendingUp size={20} /></div>
-                      Migração de Segmento Inteiro
-                    </CardTitle>
-                    <CardDescription className="text-sm font-medium">Mova todos os alunos de um nível para outro.</CardDescription>
+                <Card className="shadow-sm border-2 border-purple-200/50">
+                  <CardHeader className="pb-4 bg-purple-50/30">
+                    <CardTitle className="text-lg flex items-center gap-2 text-purple-700"><Layers size={20} /> Migrar Segmento Completo</CardTitle>
+                    <CardDescription className="text-xs">Atualiza o segmento de todos os alunos de um segmento para outro.</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">1. Segmento de Origem</label>
-                        <Select value={migrationSourceSegName} onValueChange={migrationSourceSegName => setMigrationSourceSegName(migrationSourceSegName)}>
-                          <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Escolha o segmento..." /></SelectTrigger>
-                          <SelectContent>
-                            {schoolSegments.map(s => <SelectItem key={`source-seg-${s.id}`} value={s.nome}>{s.nome}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">2. Segmento de Destino</label>
-                        <Select value={migrationTargetSegId} onValueChange={migrationTargetSegId => setMigrationTargetSegId(migrationTargetSegId)}>
-                          <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Novo segmento..." /></SelectTrigger>
-                          <SelectContent>
-                            {schoolSegments.map(s => <SelectItem key={`target-seg-bulk-${s.id}`} value={s.id}>{s.nome}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button className="h-11 font-bold gap-2 text-md shadow-lg w-full mt-2 bg-accent hover:bg-accent/90" onClick={handleMigrateSegment} disabled={isMigratingSeg || !migrationSourceSegName || !migrationTargetSegId}>
-                        {isMigratingSeg ? <Loader2 className="animate-spin" /> : <TrendingUp size={18} />}
-                        Mover Todos do Segmento
-                      </Button>
+                  <CardContent className="space-y-3 pt-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Segmento de Origem</Label>
+                      <Select value={migrationSourceSegName || 'none'} onValueChange={v => setMigrationSourceSegName(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o segmento de origem..." /></SelectTrigger>
+                        <SelectContent>{schoolSegments.map(s => <SelectItem key={s.id} value={s.nome}>{s.nome}</SelectItem>)}</SelectContent>
+                      </Select>
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Segmento de Destino</Label>
+                      <Select value={migrationTargetSegId || 'none'} onValueChange={v => setMigrationTargetSegId(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Selecione o segmento de destino..." /></SelectTrigger>
+                        <SelectContent>{schoolSegments.filter(s => s.nome !== migrationSourceSegName).map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <Button className="w-full h-10 gap-2 font-bold bg-purple-600 hover:bg-purple-700" onClick={handleMigrateSegment} disabled={isMigratingSeg || !migrationSourceSegName || !migrationTargetSegId}>
+                      {isMigratingSeg ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />} Migrar Segmento Completo
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
+
+              <Card className="shadow-sm border-2 border-blue-200/50">
+                <CardHeader className="pb-4 bg-blue-50/30">
+                  <CardTitle className="text-lg flex items-center gap-2 text-blue-700"><UserCheck size={20} /> Migrar Alunos Selecionados</CardTitle>
+                  <CardDescription className="text-xs">
+                    Move apenas os alunos marcados (✔) na aba Alunos para uma turma/segmento destino.
+                    <strong className="ml-1 text-blue-700">{selectedInFilter.length} aluno(s) selecionado(s) no momento.</strong>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Segmento Destino</Label>
+                      <Select value={targetSelectedSegmentId || 'none'} onValueChange={v => setTargetSelectedSegmentId(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Segmento..." /></SelectTrigger>
+                        <SelectContent>{schoolSegments.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Turma Destino</Label>
+                      <Select value={targetSelectedTurmaName || 'none'} onValueChange={v => setTargetSelectedTurmaName(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Turma..." /></SelectTrigger>
+                        <SelectContent>{schoolClasses.filter(c => !targetSelectedSegmentId || c.segmentoId === targetSelectedSegmentId).map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <Button className="h-10 gap-2 font-bold bg-blue-600 hover:bg-blue-700" onClick={handleBulkMigrateSelected} disabled={isMigratingSelected || selectedInFilter.length === 0 || !targetSelectedSegmentId || !targetSelectedTurmaName}>
+                      {isMigratingSelected ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />} Mover {selectedInFilter.length} Selecionado(s)
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="importacao" className="space-y-8">
-              {/* Conteúdo de Importação permanece igual */}
               <Tabs defaultValue="excel" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 h-10 mb-6">
                   <TabsTrigger value="excel" className="gap-2">Excel e Fotos</TabsTrigger>
-                  <TabsTrigger value="manual-json" className="gap-2 text-primary font-bold"><Code size={16} /> Activesoft (JSON Manual)</TabsTrigger>
+                  <TabsTrigger value="manual-json" className="gap-2 text-primary font-bold"><FileJson size={16} /> Activesoft (JSON Manual)</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="excel">
@@ -1116,10 +1105,44 @@ export default function GestaoPage() {
             </TabsContent>
 
             <TabsContent value="sistema" className="space-y-8">
-              {/* Conteúdo de Sistema permanece igual */}
               <div className="max-w-4xl mx-auto space-y-8">
+                {/* 1. CONFIGURAÇÕES ESCOLARES (TRIMESTRE) */}
+                <Card className="border-2 border-primary/20 shadow-xl overflow-hidden">
+                  <CardHeader className="bg-primary/5 border-b">
+                    <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                      <Calendar className="w-5 h-5" /> Ciclo Letivo e Períodos
+                    </CardTitle>
+                    <CardDescription>Defina o período de avaliação vigente para toda a escola.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row gap-6 items-end">
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Trimestre Ativo (Global)</Label>
+                        <Select value={activeTrimesterId} onValueChange={setActiveTrimesterId}>
+                          <SelectTrigger className="h-12 text-md font-bold border-2 border-primary/20 bg-white">
+                            <SelectValue placeholder="Selecione o trimestre" />
+                          </SelectTrigger>
+                          <SelectContent className="glass">
+                            <SelectItem value="t1" className="font-bold">1º Trimestre</SelectItem>
+                            <SelectItem value="t2" className="font-bold">2º Trimestre</SelectItem>
+                            <SelectItem value="t3" className="font-bold">3º Trimestre</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button className="h-12 px-8 font-bold gap-2 shadow-lg" onClick={saveVisualSettings}>
+                        <Save size={18} /> Salvar Período
+                      </Button>
+                    </div>
+                    <p className="mt-4 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg flex gap-2">
+                      <Info size={14} className="shrink-0" />
+                      <span><b>Atenção:</b> Mudar o trimestre aqui altera o período padrão de preenchimento para todos os professores ao abrirem as fichas.</span>
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* 2. IDENTIDADE VISUAL */}
                 <Card className="border-primary/20 shadow-lg">
-                  <CardHeader><div className="flex items-center gap-3"><Palette className="text-primary" /><CardTitle>Identidade Visual</CardTitle></div></CardHeader>
+                  <CardHeader><div className="flex items-center gap-3"><Palette className="text-primary" /><CardTitle>Identidade Visual (Logo Principal)</CardTitle></div></CardHeader>
                   <CardContent className="space-y-6">
                     <div className="flex flex-col md:flex-row items-center gap-8">
                       <div className="w-64 h-32 bg-muted/30 border rounded-xl flex items-center justify-center p-4">
@@ -1138,12 +1161,137 @@ export default function GestaoPage() {
                           <div className="flex justify-between text-xs font-bold"><span>Altura do Logo</span><span>{logoHeight}px</span></div>
                           <Slider value={[logoHeight]} onValueChange={(val) => setLogoHeight(val[0])} min={20} max={100} step={1} />
                         </div>
-                        <Button className="w-full font-bold h-11" onClick={saveVisualSettings}>Salvar Identidade</Button>
+                        <Button className="w-full font-bold h-11" onClick={saveVisualSettings}>Salvar Logo Principal</Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
+                {/* 3. ESTÚDIO DE LAYOUT DO CARÔMETRO */}
+                <Card className="border-2 border-primary/20 shadow-xl overflow-hidden">
+                  <CardHeader className="bg-primary/5 border-b">
+                    <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                      <Layout className="w-5 h-5" /> Estúdio de Layout do Carômetro
+                    </CardTitle>
+                    <CardDescription>Personalize a aparência dos cartões de alunos em tempo real.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x">
+                      {/* Lado Esquerdo: Preview */}
+                      <div className="bg-muted/30 p-8 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r">
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground mb-6 tracking-widest">Visualização do Cartão</span>
+                        
+                        <div 
+                          className="bg-card overflow-hidden border-none transition-all duration-300 mx-auto"
+                          style={{ 
+                            borderRadius: `${carometroBorderRadius}px`,
+                            transform: `scale(${carometroCardScale / 100})`,
+                            boxShadow: `0 10px 30px rgba(0,0,0,${carometroShadowIntensity})`,
+                            width: '160px'
+                          }}
+                        >
+                          <div className="aspect-[3/4] relative bg-muted/50 overflow-hidden">
+                            <div className="w-full h-full flex items-center justify-center bg-primary/5">
+                              <UserCircle size={64} className="text-primary/20" />
+                            </div>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent flex items-end justify-center p-2">
+                               <div 
+                                 className="h-5 w-full bg-white/20 backdrop-blur-md text-[8px] flex items-center justify-center text-white font-bold uppercase tracking-wider"
+                                 style={{ borderRadius: `${carometroButtonBorderRadius}px` }}
+                               >
+                                 Preencher Ficha
+                               </div>
+                            </div>
+                          </div>
+                          <div className="p-3 text-center bg-card flex flex-col gap-1 min-h-[60px] justify-center border-t">
+                            <p className="font-black uppercase tracking-tight leading-tight" style={{ fontSize: `${carometroFontSize}px` }}>Aluno Exemplo</p>
+                            <p 
+                              className="text-[8px] text-primary/60 font-black uppercase tracking-[0.2em] bg-primary/5 px-2 py-0.5 inline-block mx-auto border border-primary/10"
+                              style={{ borderRadius: `${carometroBadgeBorderRadius}px` }}
+                            >
+                              3º ANO A
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lado Direito: Controles */}
+                      <div className="p-6 md:p-8 space-y-8 max-h-[600px] overflow-y-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Alunos por Linha (PC)</span>
+                              <span className="text-primary">{carometroCardsPerRow}</span>
+                            </div>
+                            <Slider value={[carometroCardsPerRow]} onValueChange={(val) => setCarometroCardsPerRow(val[0])} min={2} max={12} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Arredondamento</span>
+                              <span className="text-primary">{carometroBorderRadius}px</span>
+                            </div>
+                            <Slider value={[carometroBorderRadius]} onValueChange={(val) => setCarometroBorderRadius(val[0])} min={0} max={40} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Tamanho/Zoom</span>
+                              <span className="text-primary">{carometroCardScale}%</span>
+                            </div>
+                            <Slider value={[carometroCardScale]} onValueChange={(val) => setCarometroCardScale(val[0])} min={60} max={140} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Espaçamento</span>
+                              <span className="text-primary">{carometroGap}px</span>
+                            </div>
+                            <Slider value={[carometroGap]} onValueChange={(val) => setCarometroGap(val[0])} min={4} max={32} step={4} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Sombra</span>
+                              <span className="text-primary">{(carometroShadowIntensity * 100).toFixed(0)}%</span>
+                            </div>
+                            <Slider value={[carometroShadowIntensity * 100]} onValueChange={(val) => setCarometroShadowIntensity(val[0] / 100)} min={0} max={25} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Fonte Nome</span>
+                              <span className="text-primary">{carometroFontSize}px</span>
+                            </div>
+                            <Slider value={[carometroFontSize]} onValueChange={(val) => setCarometroFontSize(val[0])} min={8} max={16} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Arred. Turma</span>
+                              <span className="text-primary">{carometroBadgeBorderRadius}px</span>
+                            </div>
+                            <Slider value={[carometroBadgeBorderRadius]} onValueChange={(val) => setCarometroBadgeBorderRadius(val[0])} min={0} max={20} step={1} />
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-xs font-bold uppercase text-muted-foreground">
+                              <span>Arred. Botão</span>
+                              <span className="text-primary">{carometroButtonBorderRadius}px</span>
+                            </div>
+                            <Slider value={[carometroButtonBorderRadius]} onValueChange={(val) => setCarometroButtonBorderRadius(val[0])} min={0} max={20} step={1} />
+                          </div>
+                        </div>
+
+                        <Button className="w-full font-bold h-12 text-md shadow-lg" onClick={saveVisualSettings}>
+                           <Save size={18} className="mr-2" /> Salvar Layout do Carômetro
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 4. LOGO DE IMPRESSÃO */}
                 <Card className="border-primary/20 shadow-lg">
                   <CardHeader><div className="flex items-center gap-3"><Palette className="text-primary" /><CardTitle>Logo de Impressão (Ficha Individual)</CardTitle></div></CardHeader>
                   <CardContent className="space-y-6">
@@ -1152,7 +1300,6 @@ export default function GestaoPage() {
                         {logoFichaBase64 ? <img src={logoFichaBase64} alt="Logo Ficha" className="max-w-full object-contain" style={{ height: `${logoFichaHeight}px` }} /> : <Globe className="text-muted-foreground/20" />}
                       </div>
                       <div className="flex-1 w-full space-y-4">
-                        <Label className="text-xs font-bold uppercase text-muted-foreground">Logo do Colégio para as Fichas</Label>
                         <Input type="file" accept="image/*" onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
@@ -1162,38 +1309,46 @@ export default function GestaoPage() {
                           }
                         }} />
                         <div className="space-y-2">
-                          <div className="flex justify-between text-xs font-bold"><span>Altura do Logo na Ficha</span><span>{logoFichaHeight}px</span></div>
+                          <div className="flex justify-between text-xs font-bold"><span>Altura do Logo</span><span>{logoFichaHeight}px</span></div>
                           <Slider value={[logoFichaHeight]} onValueChange={(val) => setLogoFichaHeight(val[0])} min={20} max={100} step={1} />
                         </div>
-                        <Button className="w-full font-bold h-11 bg-primary text-white" onClick={saveVisualSettings}>Salvar Logo do Colégio</Button>
+                        <Button className="w-full font-bold h-11" onClick={saveVisualSettings}>Salvar Logo de Impressão</Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
+                {/* 5. INTEGRAÇÃO SIGA */}
                 <Card className="border-primary/20 shadow-lg overflow-hidden">
                   <CardHeader className="bg-primary text-white"><div className="flex items-center gap-3"><RefreshCw size={24} /><CardTitle>Integração SIGA (Activesoft)</CardTitle></div></CardHeader>
                   <CardContent className="pt-6 space-y-4">
-                    <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">URL da API do Activesoft</Label><Input placeholder="http://siga03.activesoft.com.br/api/v1/alunos/..." value={sigaUrl ?? ""} onChange={(e) => setSigaUrl(e.target.value)} /></div>
+                    <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">URL da API</Label><Input placeholder="http://siga03.activesoft.com.br/api/v1/..." value={sigaUrl ?? ""} onChange={(e) => setSigaUrl(e.target.value)} /></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                      <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">Usuário do SIGA</Label><div className="relative"><Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Seu login" value={sigaUsername ?? ""} onChange={(e) => setSigaUsername(e.target.value)} className="pl-9" /></div></div>
-                      <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">Senha do SIGA</Label><div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input type="password" placeholder="Sua senha" value={sigaPassword ?? ""} onChange={(e) => setSigaPassword(e.target.value)} className="pl-9" /></div></div>
+                      <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">Usuário</Label><Input value={sigaUsername ?? ""} onChange={(e) => setSigaUsername(e.target.value)} /></div>
+                      <div className="space-y-2"><Label className="text-xs font-bold uppercase text-muted-foreground">Senha</Label><Input type="password" value={sigaPassword ?? ""} onChange={(e) => setSigaPassword(e.target.value)} /></div>
                     </div>
-                    <div className="space-y-2 border-t pt-4"><Label className="text-xs font-bold uppercase text-muted-foreground">Token Manual (Opcional)</Label><Input type="password" placeholder="Apenas se já possuir um token" value={sigaToken ?? ""} onChange={(e) => setSigaToken(e.target.value)} /></div>
-                    <Button variant="outline" className="w-full font-bold h-11 border-primary text-primary" onClick={saveVisualSettings}>Salvar Configurações de Conexão</Button>
+                    <Button variant="outline" className="w-full font-bold h-11 border-primary text-primary" onClick={saveVisualSettings}>Salvar Conexão</Button>
                   </CardContent>
                 </Card>
 
+                {/* 6. NOVO ADMINISTRADOR */}
                 <Card className="border-primary/20 shadow-lg">
-                  <CardHeader><div className="flex items-center gap-3"><UserPlus className="text-primary" /><CardTitle>Novo Administrador do Sistema</CardTitle></div></CardHeader>
+                  <CardHeader><div className="flex items-center gap-3"><UserPlus className="text-primary" /><CardTitle>Novo Administrador</CardTitle></div></CardHeader>
                   <CardContent>
                     <Form {...registerForm}>
                       <form onSubmit={registerForm.handleSubmit(async (data) => {
                         setIsRegisteringAdmin(true);
                         try {
-                          await createUserWithEmailAndPassword(auth!, data.email, data.password);
-                          toast({ title: "Admin cadastrado!" }); registerForm.reset();
-                        } catch (e) { toast({ variant: "destructive", title: "Erro no cadastro" }); }
+                          const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+                          const secondaryAuth = getAuthSecondary(secondaryApp);
+                          await createUserWithEmailAndPassword(secondaryAuth, data.email, data.password);
+                          await secondaryAuth.signOut();
+                          await deleteApp(secondaryApp);
+                          toast({ title: "Admin cadastrado!", description: "Sua sessão atual não foi interrompida." }); 
+                          registerForm.reset();
+                        } catch (e: any) { 
+                          toast({ variant: "destructive", title: "Erro no cadastro", description: e.message || "Erro desconhecido." }); 
+                        }
                         finally { setIsRegisteringAdmin(false); }
                       })} className="space-y-4">
                         <FormField control={registerForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>E-mail</FormLabel><FormControl><Input placeholder="admin@escola.com" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)} />

@@ -89,9 +89,9 @@ function ScoreDot({ score }: { score: EvaluationScore }) {
           <div className="w-1/2 h-full bg-[#04a74c]" />
         </div>
       ) : (
-        <div 
-          className="w-full h-full" 
-          style={{ backgroundColor: score === "HIGH" ? "#04a74c" : "#8c3127" }} 
+        <div
+          className="w-full h-full"
+          style={{ backgroundColor: score === "HIGH" ? "#04a74c" : "#8c3127" }}
         />
       )}
     </div>
@@ -124,28 +124,28 @@ function LinedTextArea({ value, onChange, fieldId, title, linesCount = 6, lineHe
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     const lines = newValue.split('\n');
-    
+
     // Se houver limite de caracteres, não deixa passar
     if (maxChars && newValue.length > maxChars) {
       return;
     }
-    
+
     // Se o número de linhas manuais (quebras de linha) for maior que o permitido, bloqueia
     if (lines.length > linesCount) {
       return;
     }
-    
+
     onChange(newValue);
   };
 
   return (
     <div className="w-full space-y-4 flex flex-col items-center">
       {title && <h3 className="text-xl font-bold text-center uppercase tracking-wider">{title}</h3>}
-      <div 
-        className="border border-black/30 p-1 bg-white relative mx-auto" 
-        style={{ 
-          width: "760px", 
-          maxWidth: "100%", 
+      <div
+        className="border border-black/30 p-1 bg-white relative mx-auto"
+        style={{
+          width: "760px",
+          maxWidth: "100%",
           boxSizing: "border-box"
         }}
       >
@@ -222,7 +222,7 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
       const updateScale = () => {
         const parentWidth = parent.clientWidth;
         const baseWidth = 850;
-        
+
         if (parentWidth < baseWidth && parentWidth > 0) {
           const newScale = (parentWidth - 32) / baseWidth;
           setScaleFactor(Math.max(0.3, newScale));
@@ -511,16 +511,16 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
       <div className={cn("w-full transition-all duration-300", !hideControls && "flex flex-col items-center gap-6")}>
         {!hideControls && (
           <div className="flex bg-muted/30 p-1 rounded-xl border border-primary/10 gap-1 mt-4 print:hidden">
-            <Button 
-              variant={viewSide === 'frente' ? 'default' : 'ghost'} 
+            <Button
+              variant={viewSide === 'frente' ? 'default' : 'ghost'}
               size="sm"
               className="rounded-lg h-9 w-32 font-bold transition-all"
               onClick={() => setViewSide('frente')}
             >
               Frente
             </Button>
-            <Button 
-              variant={viewSide === 'verso' ? 'default' : 'ghost'} 
+            <Button
+              variant={viewSide === 'verso' ? 'default' : 'ghost'}
               size="sm"
               className="rounded-lg h-9 w-32 font-bold transition-all"
               onClick={() => setViewSide('verso')}
@@ -536,58 +536,32 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
             "bg-white text-black p-4 md:p-8 mx-auto border shadow-2xl relative font-serif",
             "print:shadow-none print:border-none print:p-0 print:m-0 print:mx-auto",
             hideControls
-              ? "max-w-none w-full border-none shadow-none p-0 mb-0 break-after-page"
+              ? "max-w-none w-full border-none shadow-none p-0 mb-0 print-mode-ficha print-forced-a4"
               : "max-w-[850px] mb-10 min-h-[1120px] flex flex-col"
           )}
-          style={{
-            transformOrigin: "top center",
-            transform: (allowScaling || !hideControls) && scaleFactor < 1 ? `scale(${scaleFactor})` : "none",
-            marginBottom: (allowScaling || !hideControls) && scaleFactor < 1 ? `-${(1 - scaleFactor) * 100}%` : undefined
-          }}
           id="ficha-print-area"
         >
-          <style dangerouslySetInnerHTML={{ __html: `
-            @media print {
-              @page { size: A4 portrait; margin: 0; }
-              body { margin: 0; padding: 0; }
-              #ficha-print-area { 
-                width: 210mm !important; 
-                height: 297mm !important; 
-                margin: 0 !important;
-                padding: 10mm !important;
-                transform: scale(0.93) !important;
-                transform-origin: top center !important;
-                box-sizing: border-box !important;
-                display: flex !important;
-                flex-direction: column !important;
-                overflow: hidden !important;
-              }
-              .print-no-break { break-inside: avoid; page-break-inside: avoid; }
-              .split-container-print { display: flex !important; gap: 4mm !important; width: 100% !important; align-items: stretch !important; }
-              .split-item-left { flex: 1 !important; }
-              .split-item-right { width: 30% !important; min-width: 55mm !important; }
-            }
-          ` }} />
           {/* ----- LADO FRENTE (INFANTIL OU PADRÃO) ----- */}
           <div className={cn(
-            "w-full flex-1 flex flex-col split-container-print",
+            "w-full flex-1 flex flex-col split-container-print print-zoom-front",
             !hideControls && viewSide !== 'frente' && "hidden"
           )}>
             {/* ----- CABEÇALHO LÓGICO (FLEX/GRID) ----- */}
-            <div className="flex justify-between items-start mb-6 print:mb-2 print:pt-[5mm]">
-              <div 
-                className="flex items-center justify-center overflow-hidden"
-                style={{ 
-                  height: (hideControls ? Math.min(resolvedLayout?.logoHeight || logoHeight, 45) : (resolvedLayout?.logoHeight || logoHeight) + 10) + 'px',
-                  width: (resolvedLayout?.logoWidth ? `${resolvedLayout.logoWidth}px` : 'auto')
+            <div className="flex justify-between items-start mb-4 print:mb-2 print:pt-[5mm]">
+              <div
+                className="flex items-center justify-center text-center"
+                style={{
+                  height: (hideControls ? Math.max(resolvedLayout?.logoHeight || logoHeight, 50) : (resolvedLayout?.logoHeight || logoHeight) + 10) + 'px',
+                  width: 'auto',
+                  maxWidth: '200px'
                 }}
               >
-                <img src={logoUrl} alt="Logo Colégio" className="object-contain w-full h-full" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <img src={logoUrl} alt="Logo Colégio" className="object-contain w-full h-full max-h-full" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               </div>
               <div className="flex-1 px-4 text-right">
-                <h1 
+                <h1
                   className="text-3xl font-bold text-[#2e3d4d] uppercase tracking-tight"
-                  style={{ 
+                  style={{
                     fontSize: `${resolvedLayout?.headerStyle?.fontSize || resolvedLayout?.cabecalhoFontSize || 28}px`,
                     fontWeight: resolvedLayout?.headerStyle?.bold ? 'bold' : 'normal',
                     fontStyle: resolvedLayout?.headerStyle?.italic ? 'italic' : 'normal',
@@ -601,7 +575,7 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
             </div>
 
             {/* ----- INFO BOX (GRADE DE DADOS) ----- */}
-            <div className="w-full border-2 border-black mb-6 font-sans text-sm">
+            <div className="w-full border-2 border-black mb-4 font-sans text-sm">
               <div className="flex border-b-2 border-black">
                 <div className="flex-1 p-1 border-r-2 border-black px-2 flex items-center gap-2">
                   <span className="font-bold text-[#2e3d4d] whitespace-nowrap">Nome do Aluno(a):</span>
@@ -662,65 +636,65 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
                   }}
                 />
 
-                 <div className="flex flex-col items-center gap-6 pt-12 flex-shrink-0">
-                    <div className="grid grid-cols-3 gap-8 w-full px-4 uppercase transition-all">
-                       {(resolvedLayout?.assinaturas || ["Assinatura da Professora", "Assinatura da Coordenadora", "Assinatura do Responsável"]).map((sig, sIdx) => {
-                         const style = resolvedLayout?.signatureStyles?.[sIdx] || resolvedLayout?.assinaturasStyle || {};
-                         return (
-                          <div key={sIdx} className="flex flex-col items-center gap-1"
-                            style={{
-                              fontSize: style.fontSize ? `${style.fontSize}px` : "12px",
-                              fontWeight: style.bold !== false ? 'bold' : 'normal',
-                              fontStyle: style.italic ? 'italic' : 'normal',
-                              color: style.color || 'inherit',
-                              textAlign: style.alignment || 'center'
-                            }}
-                          >
-                            <div className="w-full border-t-2 border-black" style={{ borderColor: style.color || 'black' }} />
-                            {sig}
-                          </div>
-                         );
-                       })}
-                    </div>
-                   <p className="font-serif italic text-sm mt-4 tracking-wider">Rendimento - {currentColumn.nome}</p>
-                   {/* Infantil Table Logic */}
-                   <div className="w-full overflow-hidden border-2 border-black font-sans text-[10px]">
-                      <div className="grid grid-cols-3 divide-x-2 divide-black">
-                         {categories[0].itens.map((item) => (
-                           <div key={item} className="flex flex-col">
-                              <div className="bg-white border-b-2 border-black py-1 px-4 font-bold text-center uppercase tracking-widest">{item}</div>
-                              <div className="grid grid-cols-4 divide-x divide-black/30 h-10">
-                                 {(['NONE', 'LOW', 'MEDIUM', 'HIGH'] as EvaluationScore[]).map((score) => (
-                                    <div key={score} className="flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"
-                                      onClick={() => handleScoreChange(categories[0].titulo, item, currentColumn.id)}
-                                    >
-                                       <span className="italic font-serif text-[9px] mb-1">
-                                          {score === 'NONE' ? (resolvedLayout?.infantilConceitos?.[0] || 'I') : 
-                                           score === 'LOW' ? (resolvedLayout?.infantilConceitos?.[1] || 'PM') : 
-                                           score === 'MEDIUM' ? (resolvedLayout?.infantilConceitos?.[2] || 'B') : 
-                                           (resolvedLayout?.infantilConceitos?.[3] || 'MB')}
-                                       </span>
-                                       <div className={cn("w-3 h-3 rounded-full border border-black", scores[categories[0].titulo]?.[item]?.[currentColumn.id] === score && "bg-black")} />
-                                    </div>
-                                 ))}
+                <div className="flex flex-col items-center gap-6 pt-12 flex-shrink-0">
+                  <div className="grid grid-cols-3 gap-8 w-full px-4 uppercase transition-all">
+                    {(resolvedLayout?.assinaturas || ["Assinatura da Professora", "Assinatura da Coordenadora", "Assinatura do Responsável"]).map((sig, sIdx) => {
+                      const style = resolvedLayout?.signatureStyles?.[sIdx] || resolvedLayout?.assinaturasStyle || {};
+                      return (
+                        <div key={sIdx} className="flex flex-col items-center gap-1"
+                          style={{
+                            fontSize: style.fontSize ? `${style.fontSize}px` : "12px",
+                            fontWeight: style.bold !== false ? 'bold' : 'normal',
+                            fontStyle: style.italic ? 'italic' : 'normal',
+                            color: style.color || 'inherit',
+                            textAlign: style.alignment || 'center'
+                          }}
+                        >
+                          <div className="w-full border-t-2 border-black" style={{ borderColor: style.color || 'black' }} />
+                          {sig}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="font-serif italic text-sm mt-4 tracking-wider">Rendimento - {currentColumn.nome}</p>
+                  {/* Infantil Table Logic */}
+                  <div className="w-full overflow-hidden border-2 border-black font-sans text-[10px]">
+                    <div className="grid grid-cols-3 divide-x-2 divide-black">
+                      {categories[0].itens.map((item) => (
+                        <div key={item} className="flex flex-col">
+                          <div className="bg-white border-b-2 border-black py-1 px-4 font-bold text-center uppercase tracking-widest">{item}</div>
+                          <div className="grid grid-cols-4 divide-x divide-black/30 h-10">
+                            {(['NONE', 'LOW', 'MEDIUM', 'HIGH'] as EvaluationScore[]).map((score) => (
+                              <div key={score} className="flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors"
+                                onClick={() => handleScoreChange(categories[0].titulo, item, currentColumn.id)}
+                              >
+                                <span className="italic font-serif text-[9px] mb-1">
+                                  {score === 'NONE' ? (resolvedLayout?.infantilConceitos?.[0] || 'I') :
+                                    score === 'LOW' ? (resolvedLayout?.infantilConceitos?.[1] || 'PM') :
+                                      score === 'MEDIUM' ? (resolvedLayout?.infantilConceitos?.[2] || 'B') :
+                                        (resolvedLayout?.infantilConceitos?.[3] || 'MB')}
+                                </span>
+                                <div className={cn("w-3 h-3 rounded-full border border-black", scores[categories[0].titulo]?.[item]?.[currentColumn.id] === score && "bg-black")} />
                               </div>
-                           </div>
-                         ))}
-                      </div>
-                      <div className="bg-white border-t-2 border-black p-1 text-[8px] flex items-center justify-center text-center font-bold">
-                        {resolvedLayout?.infantilLegenda || (
-                          <div className="flex justify-between w-full px-4">
-                            <span>Nota 0 a 3,9: I (Insuficiente)</span>
-                            <span>|</span>
-                            <span>Nota 4,0 a 5,9: PM (Precisa Melhorar)</span>
-                            <span>|</span>
-                            <span>Nota 6,0 a 7,9: B (Bom)</span>
-                            <span>|</span>
-                            <span>Nota 8,0 a 10: MB (Muito Bom)</span>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                   </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-white border-t-2 border-black p-1 text-[8px] flex items-center justify-center text-center font-bold">
+                      {resolvedLayout?.infantilLegenda || (
+                        <div className="flex justify-between w-full px-4">
+                          <span>Nota 0 a 3,9: I (Insuficiente)</span>
+                          <span>|</span>
+                          <span>Nota 4,0 a 5,9: PM (Precisa Melhorar)</span>
+                          <span>|</span>
+                          <span>Nota 6,0 a 7,9: B (Bom)</span>
+                          <span>|</span>
+                          <span>Nota 8,0 a 10: MB (Muito Bom)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -783,17 +757,17 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
                     <tbody>
                       {categories.map((cat) => (
                         <React.Fragment key={cat.titulo}>
-                          <tr className="bg-[#e9eff7] h-8">
+                          <tr className="bg-[#e9eff7] h-[26px]">
                             {columns.map(col => (
                               <td key={col.id} className="border-2 border-black"></td>
                             ))}
                           </tr>
                           {cat.itens.map((item) => (
-                            <tr key={item} className="h-8">
+                            <tr key={item} className="h-[26px]">
                               {columns.map(col => (
-                                <td 
-                                  key={col.id} 
-                                  className="border-2 border-black p-0.5 text-center align-middle cursor-pointer select-none" 
+                                <td
+                                  key={col.id}
+                                  className="border-2 border-black p-0 text-center align-middle cursor-pointer select-none"
                                   onClick={() => handleScoreChange(cat.titulo, item, col.id)}
                                 >
                                   <ScoreDot score={scores[cat.titulo]?.[item]?.[col.id] || 'NONE'} />
@@ -807,17 +781,17 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
                       {/* SEÇÃO 4 - NOTAS DAS SUGESTÕES */}
                       {resolvedLayout?.showSugestoesFrente !== false && (
                         <React.Fragment>
-                          <tr className="bg-[#e9eff7] h-8">
+                          <tr className="bg-[#e9eff7] h-[26px]">
                             {columns.map(col => (
                               <td key={col.id} className="border-2 border-black"></td>
                             ))}
                           </tr>
                           {suggestionList.map((sugg) => (
-                            <tr key={sugg} className="h-8">
+                            <tr key={sugg} className="h-[26px]">
                               {columns.map(col => (
-                                <td 
-                                  key={col.id} 
-                                  className="border-2 border-black p-0 text-center align-middle cursor-pointer select-none" 
+                                <td
+                                  key={col.id}
+                                  className="border-2 border-black p-0 text-center align-middle cursor-pointer select-none"
                                   onClick={() => handleSuggestionChange(sugg, col.id)}
                                 >
                                   {suggestions[sugg]?.[col.id] && (
@@ -839,27 +813,28 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
           {/* ----- LADO VERSO (CONSIDERAÇÕES) ----- */}
           {(resolvedLayout?.hasVerso ?? true) && (
             <div className={cn(
-              "w-full bg-white font-sans flex flex-col items-center print:flex",
+              "w-full bg-white font-sans flex flex-col items-center print:flex print-zoom-back",
               !hideControls && viewSide !== 'verso' && "hidden"
             )}>
-              <div 
-                className="font-bold text-center uppercase tracking-wider transition-all p-2 mb-4 mt-2"
-                style={{ 
-                  fontSize: '20px',
+              <div
+                className="font-bold text-center uppercase tracking-wider transition-all p-2 mb-2 mt-1"
+                style={{
+                  fontSize: '18px',
                   color: '#2e3d4d'
                 }}
               >
                 Considerações
               </div>
-              
-              <div className="flex flex-col items-center w-full px-[5mm] gap-2">
+
+              <div className="flex flex-col items-center w-full px-[5mm] gap-1">
                 {(["t1", "t2", "t3"] as const).slice(0, resolvedLayout?.backPeriodsCount || 3).map((trimestre, idx) => (
-                  <div 
-                    key={trimestre} 
+                  <div
+                    key={trimestre}
                     className="w-full flex flex-col items-center print-no-break"
+                    style={{ marginBottom: '2mm' }}
                   >
-                    <h3 
-                      className="text-[14px] font-bold text-center mb-1 uppercase" 
+                    <h3
+                      className="text-[13px] font-bold text-center mb-1 uppercase"
                       style={{ color: '#2e3d4d' }}
                     >
                       Considerações do {idx + 1}º Trimestre
@@ -869,7 +844,7 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
                       fieldId={`consideracoes-${student.id}-${trimestre}`}
                       value={considerations[trimestre] || ""}
                       linesCount={resolvedLayout?.backLinesCount || 7}
-                      lineHeight={resolvedLayout?.backLineHeight || 28}
+                      lineHeight={resolvedLayout?.backLineHeight || 26}
                       maxChars={resolvedLayout?.backMaxChars}
                       onChange={(val) => {
                         lastLocalUpdateRef.current = Date.now();
@@ -878,19 +853,19 @@ const StudentEvaluationReport = React.forwardRef<StudentEvaluationReportRef, { s
                     />
 
                     {/* Assinaturas após cada período */}
-                    <div className="flex justify-between items-center w-full px-4 mt-4 mb-6">
-                       <div className="flex flex-col items-center w-[30%]">
-                          <div className="w-full border-t border-black mb-1"></div>
-                          <span className="text-[9px] uppercase font-bold text-[#2e3d4d]">Professor(a)</span>
-                       </div>
-                       <div className="flex flex-col items-center w-[30%]">
-                          <div className="w-full border-t border-black mb-1"></div>
-                          <span className="text-[9px] uppercase font-bold text-[#2e3d4d]">Coordenadora</span>
-                       </div>
-                       <div className="flex flex-col items-center w-[30%]">
-                          <div className="w-full border-t border-black mb-1"></div>
-                          <span className="text-[9px] uppercase font-bold text-[#2e3d4d]">Responsável</span>
-                       </div>
+                    <div className="flex justify-between items-center w-full px-4 mt-2 mb-2">
+                      <div className="flex flex-col items-center w-[30%]">
+                        <div className="w-full border-t border-black mb-1"></div>
+                        <span className="text-[8px] uppercase font-bold text-[#2e3d4d]">Professor(a)</span>
+                      </div>
+                      <div className="flex flex-col items-center w-[30%]">
+                        <div className="w-full border-t border-black mb-1"></div>
+                        <span className="text-[8px] uppercase font-bold text-[#2e3d4d]">Coordenadora</span>
+                      </div>
+                      <div className="flex flex-col items-center w-[30%]">
+                        <div className="w-full border-t border-black mb-1"></div>
+                        <span className="text-[8px] uppercase font-bold text-[#2e3d4d]">Responsável</span>
+                      </div>
                     </div>
                   </div>
                 ))}
